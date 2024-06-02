@@ -1,10 +1,13 @@
 """Newtonian simulator implementation."""
 
 from cmath import atan, pi, tan
+import json
 import math
 from math import copysign, degrees, radians, sin
 import os
 import pathlib
+import pandas as pd
+import scenic.simulators.newtonian.parse_bag as parse_bag
 import time
 
 from PIL import Image
@@ -85,10 +88,24 @@ class NewtonianSimulation(DrivingSimulation):
         if timestep is None:
             timestep = 0.1
 
+        dir_path = ("/home/genindi1/projects/ANSR/metrics/test_data/"
+                    "maneuver_thread/1714002580-collect_bag_apltest_as_p_p_r0_10/")
+        description = json.load(
+            open(dir_path+"inputs/generated_missions/Maneuver/AreaSearch/AS_P_P_R0_10/description.json")
+            )
+        self.ros_data: pd.DataFrame = parse_bag.bag_to_dataframe(dir_path+"outputs/bags_0.mcap",
+                                                                 description)
+        self.row = self.ros_data.iterrows()
+        for r in self.ros_data:
+            self.now_time = self.ros_data.Timestamp
+            break
+        self.obj_from_id = {}
         super().__init__(scene, timestep=timestep, **kwargs)
 
     def setup(self):
         super().setup()
+        for obj in self.objects:
+            self.obj_from_id[obj.id] = obj
 
         if self.render:
             # determine window size
@@ -164,38 +181,15 @@ class NewtonianSimulation(DrivingSimulation):
         return self.min_x <= x <= self.max_x and self.min_y <= y <= self.max_y
 
     def step(self):
-        for obj in self.objects:
-            current_speed = obj.velocity.norm()
-            if hasattr(obj, "hand_brake"):
-                forward = obj.velocity.dot(Vector(0, 1).rotatedBy(obj.heading)) >= 0
-                signed_speed = current_speed if forward else -current_speed
-                if obj.hand_brake or obj.brake > 0:
-                    braking = MAX_BRAKING * max(obj.hand_brake, obj.brake)
-                    acceleration = braking * self.timestep
-                    if acceleration >= current_speed:
-                        signed_speed = 0
-                    elif forward:
-                        signed_speed -= acceleration
-                    else:
-                        signed_speed += acceleration
-                else:
-                    acceleration = obj.throttle * MAX_ACCELERATION
-                    if obj.reverse:
-                        acceleration *= -1
-                    signed_speed += acceleration * self.timestep
-
-                obj.velocity = Vector(0, signed_speed).rotatedBy(obj.heading)
-                if obj.steer:
-                    turning_radius = obj.length / sin(obj.steer * math.pi / 2)
-                    obj.angularSpeed = -signed_speed / turning_radius
-                else:
-                    obj.angularSpeed = 0
-                obj.speed = abs(signed_speed)
-            else:
-                obj.speed = current_speed
-            obj.position += obj.velocity * self.timestep
-            obj.heading += obj.angularSpeed * self.timestep
-
+        for i, msg in self.row:
+            if msg.Event == "GT_POSITION":
+                self.obj_from_id[msg.EntityID].position = Vector(msg.PositionX, msg.PositionY)
+            elif msg.Event == "ODOM":
+                self.car.position = Vector(msg.WorldX, msg.WorldY)
+            # TODO: Need to stop one row earlier
+            if msg.Timestamp > self.now_time + self.timestep:
+                self.now_time = msg.Timestamp
+                break
         if self.render:
             self.draw_objects()
             pygame.event.pump()
