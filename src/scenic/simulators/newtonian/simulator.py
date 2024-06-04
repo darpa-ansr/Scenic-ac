@@ -30,7 +30,7 @@ from scenic.domains.driving.controllers import (
 )
 from scenic.domains.driving.roads import Network
 from scenic.domains.driving.simulators import DrivingSimulation, DrivingSimulator
-from scenic.syntax.veneer import verbosePrint
+from scenic.syntax.veneer import verbosePrint, _globalParameters
 
 current_dir = pathlib.Path(__file__).parent.absolute()
 
@@ -88,13 +88,8 @@ class NewtonianSimulation(DrivingSimulation):
         if timestep is None:
             timestep = 0.1
 
-        dir_path = ("/home/genindi1/projects/ANSR/metrics/test_data/"
-                    "maneuver_thread/1714002580-collect_bag_apltest_as_p_p_r0_10/")
-        description = json.load(
-            open(dir_path+"inputs/generated_missions/Maneuver/AreaSearch/AS_P_P_R0_10/description.json")
-            )
-        self.ros_data: pd.DataFrame = parse_bag.bag_to_dataframe(dir_path+"outputs/bags_0.mcap",
-                                                                 description)
+        description = json.load(open(_globalParameters["description"]))
+        self.ros_data: pd.DataFrame = parse_bag.bag_to_dataframe(_globalParameters["bag"], description)
         self.row = self.ros_data.iterrows()
         for _, r in self.ros_data.iterrows():
             self.now_time = r.Timestamp
@@ -117,8 +112,9 @@ class NewtonianSimulation(DrivingSimulation):
             self.screen = pygame.display.set_mode(
                 (WIDTH, HEIGHT), pygame.HWSURFACE | pygame.DOUBLEBUF
             )
-            img_path = "/home/genindi1/projects/ANSR/metrics/test/simple_scenario/maneuver_task_output/maneuver_task_output.png"
-            self.screen.blit(pygame.image.load(img_path), (0, 0)) #.fill((255, 255, 255))
+            img_path = _globalParameters["topo_map"]
+            self.map = pygame.image.load(img_path)
+            self.screen.blit(self.map, (0, 0)) #.fill((255, 255, 255))
             x, y, _ = self.objects[0].position
             self.min_x, self.max_x = min_x - 50, max_x + 50
             self.min_y, self.max_y = min_y - 50, max_y + 50
@@ -199,6 +195,7 @@ class NewtonianSimulation(DrivingSimulation):
             pygame.event.pump()
 
     def draw_objects(self):
+        self.screen.blit(self.map, (0, 0)) #.fill((255, 255, 255))
         # self.screen.fill((255, 255, 255))
         # for screenPoints, color, width in self.network_polygons:
         #     pygame.draw.lines(self.screen, color, False, screenPoints, width=width)

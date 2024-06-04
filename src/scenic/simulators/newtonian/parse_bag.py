@@ -1,12 +1,14 @@
 import logging
+import math
+import pandas as pd
 import tarfile
-from pathlib import Path
-from typing import Union
 
 from mcap.reader import make_reader, McapReader
 from mcap_ros2.decoder import DecoderFactory
-import pandas as pd
-import math
+from pathlib import Path
+from typing import Union
+
+from scenic.syntax.veneer import verbosePrint, _globalParameters
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -22,7 +24,7 @@ class EoIPoseOutsideTimeTolerance(Exception):
 POSE_VALID_TIME_TOLERANCE = 1.5
 PERCEPTION_TOPIC = '/adk_node/input/perception'
 GT_PERCEPTION_TOPIC = '/adk_node/ground_truth/perception'
-GT_ODOMETRY_TOPIC = '/adk_node/SimpleFlight/odom_local_ned'
+GT_ODOMETRY_TOPIC = _globalParameters["ego_topic"]
 COLLISION_TOPIC = '/adk_node/SimpleFlight/collision_state'
 
 
@@ -66,13 +68,13 @@ def bag_to_dataframe(bag_path: Union[str, Path],
 
     POSE_VALID_TIME_TOLERANCE = 5
     valid_topics = [PERCEPTION_TOPIC, GT_PERCEPTION_TOPIC, GT_ODOMETRY_TOPIC, COLLISION_TOPIC]
+    valid_topics += _globalParameters["entity_ground_truth_topics"]
     entity_attribute_map = {}
     entity_last_pose = {}
     for eoi in description_info['scenario_objective']['entities_of_interest']:
         entity_id = eoi['entity_id']
         entity_attribute_map[entity_id] = eoi['attributes']
         entity_last_pose[entity_id] = {'timestamp': None, 'pose': None}
-        valid_topics.append(f'/airsim_node/{entity_id}/envcar_pose')
 
     data = []
     with open(bag_path, 'rb') as f:
