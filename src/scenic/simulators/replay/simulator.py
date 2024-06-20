@@ -1,10 +1,13 @@
-"""Newtonian simulator implementation."""
+"""Replay simulator implementation."""
 
 from cmath import atan, pi, tan
+import json
 import math
 from math import copysign, degrees, radians, sin
 import os
 import pathlib
+import pandas as pd
+import scenic.simulators.replay.parse_bag as parse_bag
 import time
 
 from PIL import Image
@@ -27,12 +30,12 @@ from scenic.domains.driving.controllers import (
 )
 from scenic.domains.driving.roads import Network
 from scenic.domains.driving.simulators import DrivingSimulation, DrivingSimulator
-from scenic.syntax.veneer import verbosePrint
+from scenic.syntax.veneer import verbosePrint, _globalParameters
 
 current_dir = pathlib.Path(__file__).parent.absolute()
 
-WIDTH = 1280
-HEIGHT = 800
+WIDTH = 1000 #1280
+HEIGHT = 1000 #800
 MAX_ACCELERATION = 5.6  # in m/s2, seems to be a pretty reasonable value
 MAX_BRAKING = 4.6
 
@@ -44,8 +47,8 @@ SIDEWALK_COLOR = (0, 128, 255)
 SHOULDER_COLOR = (96, 96, 96)
 
 
-class NewtonianSimulator(DrivingSimulator):
-    """Implementation of `Simulator` for the Newtonian simulator.
+class ReplaySimulator(DrivingSimulator):
+    """Implementation of `Simulator` for the Replay simulator.
 
     Args:
         network (Network): road network to display in the background, if any.
@@ -54,7 +57,7 @@ class NewtonianSimulator(DrivingSimulator):
     .. versionchanged:: 3.0
 
         The **timestep** argument is removed: it can be specified when calling
-        `simulate` instead. The default timestep for the Newtonian simulator
+        `simulate` instead. The default timestep for the Replay simulator
         when not otherwise specified is still 0.1 seconds.
     """
 
@@ -65,7 +68,7 @@ class NewtonianSimulator(DrivingSimulator):
         self.network = network
 
     def createSimulation(self, scene, **kwargs):
-        simulation = NewtonianSimulation(
+        simulation = ReplaySimulation(
             scene, self.network, self.render, self.export_gif, **kwargs
         )
         if self.export_gif and self.render:
@@ -73,8 +76,8 @@ class NewtonianSimulator(DrivingSimulator):
         return simulation
 
 
-class NewtonianSimulation(DrivingSimulation):
-    """Implementation of `Simulation` for the Newtonian simulator."""
+class ReplaySimulation(DrivingSimulation):
+    """Implementation of `Simulation` for the Replay simulator."""
 
     def __init__(self, scene, network, render, export_gif, timestep, **kwargs):
         self.export_gif = export_gif
@@ -85,22 +88,33 @@ class NewtonianSimulation(DrivingSimulation):
         if timestep is None:
             timestep = 0.1
 
+        description = json.load(open(_globalParameters["description"]))
+        self.ros_data: pd.DataFrame = parse_bag.bag_to_dataframe(_globalParameters["bag"], description)
+        self.row = self.ros_data.iterrows()
+        for _, r in self.ros_data.iterrows():
+            self.now_time = r.Timestamp
+            break
+        self.obj_from_id = {}
         super().__init__(scene, timestep=timestep, **kwargs)
 
     def setup(self):
         super().setup()
+        for obj in self.objects:
+            self.obj_from_id[obj.id] = obj
 
         if self.render:
             # determine window size
-            min_x, max_x = findMinMax(obj.x for obj in self.objects)
-            min_y, max_y = findMinMax(obj.y for obj in self.objects)
+            min_x, max_x = -500, 500 #findMinMax(obj.x for obj in self.objects)
+            min_y, max_y = -500, 500 #findMinMax(obj.y for obj in self.objects)
 
             pygame.init()
             pygame.font.init()
             self.screen = pygame.display.set_mode(
                 (WIDTH, HEIGHT), pygame.HWSURFACE | pygame.DOUBLEBUF
             )
-            self.screen.fill((255, 255, 255))
+            img_path = _globalParameters["topo_map"]
+            self.map = pygame.image.load(img_path)
+            self.screen.blit(self.map, (0, 0)) #.fill((255, 255, 255))
             x, y, _ = self.objects[0].position
             self.min_x, self.max_x = min_x - 50, max_x + 50
             self.min_y, self.max_y = min_y - 50, max_y + 50
@@ -117,9 +131,12 @@ class NewtonianSimulation(DrivingSimulation):
 
             img_path = os.path.join(current_dir, "car.png")
             self.car = pygame.image.load(img_path)
-            self.car_width = int(3.5 * WIDTH / self.size_x)
+            self.car_width = 10*int(3.5 * WIDTH / self.size_x)
             self.car_height = self.car_width
             self.car = pygame.transform.scale(self.car, (self.car_width, self.car_height))
+            img_path = os.path.join(current_dir, "blue_car.png")
+            self.blue_car = pygame.image.load(img_path)
+            self.blue_car = pygame.transform.scale(self.blue_car, (self.car_width, self.car_height))
             self.parse_network()
             self.draw_objects()
 
@@ -164,46 +181,24 @@ class NewtonianSimulation(DrivingSimulation):
         return self.min_x <= x <= self.max_x and self.min_y <= y <= self.max_y
 
     def step(self):
-        for obj in self.objects:
-            current_speed = obj.velocity.norm()
-            if hasattr(obj, "hand_brake"):
-                forward = obj.velocity.dot(Vector(0, 1).rotatedBy(obj.heading)) >= 0
-                signed_speed = current_speed if forward else -current_speed
-                if obj.hand_brake or obj.brake > 0:
-                    braking = MAX_BRAKING * max(obj.hand_brake, obj.brake)
-                    acceleration = braking * self.timestep
-                    if acceleration >= current_speed:
-                        signed_speed = 0
-                    elif forward:
-                        signed_speed -= acceleration
-                    else:
-                        signed_speed += acceleration
-                else:
-                    acceleration = obj.throttle * MAX_ACCELERATION
-                    if obj.reverse:
-                        acceleration *= -1
-                    signed_speed += acceleration * self.timestep
-
-                obj.velocity = Vector(0, signed_speed).rotatedBy(obj.heading)
-                if obj.steer:
-                    turning_radius = obj.length / sin(obj.steer * math.pi / 2)
-                    obj.angularSpeed = -signed_speed / turning_radius
-                else:
-                    obj.angularSpeed = 0
-                obj.speed = abs(signed_speed)
-            else:
-                obj.speed = current_speed
-            obj.position += obj.velocity * self.timestep
-            obj.heading += obj.angularSpeed * self.timestep
-
+        for i, msg in self.row:
+            if msg.Event == "GT_POSITION":
+                self.obj_from_id[msg.EntityID].position = Vector(msg.PositionX, msg.PositionY)
+            elif msg.Event == "ODOM":
+                self.obj_from_id["ego"].position = Vector(msg.WorldX, msg.WorldY)
+            # TODO: Need to stop one row earlier
+            if msg.Timestamp > self.now_time + self.timestep:
+                self.now_time = msg.Timestamp
+                break
         if self.render:
             self.draw_objects()
             pygame.event.pump()
 
     def draw_objects(self):
-        self.screen.fill((255, 255, 255))
-        for screenPoints, color, width in self.network_polygons:
-            pygame.draw.lines(self.screen, color, False, screenPoints, width=width)
+        self.screen.blit(self.map, (0, 0)) #.fill((255, 255, 255))
+        # self.screen.fill((255, 255, 255))
+        # for screenPoints, color, width in self.network_polygons:
+        #     pygame.draw.lines(self.screen, color, False, screenPoints, width=width)
 
         for i, obj in enumerate(self.objects):
             color = (255, 0, 0) if i == 0 else (0, 0, 255)
@@ -215,10 +210,16 @@ class NewtonianSimulation(DrivingSimulation):
             x, y = self.scenicToScreenVal(obj.position)
             rect_x, rect_y = self.scenicToScreenVal(obj.position + pos_vec)
             if hasattr(obj, "isCar") and obj.isCar:
-                self.rotated_car = pygame.transform.rotate(
-                    self.car, math.degrees(obj.heading)
-                )
-                self.screen.blit(self.rotated_car, (rect_x, rect_y))
+                if hasattr(obj, "color") and obj.color == (0,0,1):
+                    self.rotated_car = pygame.transform.rotate(
+                        self.blue_car, math.degrees(obj.heading)
+                    )
+                    self.screen.blit(self.rotated_car, (rect_x, rect_y))
+                else:
+                    self.rotated_car = pygame.transform.rotate(
+                        self.car, math.degrees(obj.heading)
+                    )
+                    self.screen.blit(self.rotated_car, (rect_x, rect_y))
             else:
                 corners = [self.scenicToScreenVal(corner) for corner in obj._corners2D]
                 pygame.draw.polygon(self.screen, color, corners)
@@ -230,7 +231,7 @@ class NewtonianSimulation(DrivingSimulation):
             frame = np.transpose(frame, (1, 0, 2))
             self.frames.append(frame)
 
-        time.sleep(self.timestep)
+        time.sleep(self.timestep/10)
 
     def generate_gif(self, filename="simulation.gif"):
         imgs = [Image.fromarray(frame) for frame in self.frames]
