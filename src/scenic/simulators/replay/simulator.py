@@ -1,13 +1,11 @@
 """Replay simulator implementation."""
 
 from cmath import atan, pi, tan
-import json
 import math
 from math import copysign, degrees, radians, sin
 import os
 import pathlib
 import pandas as pd
-import scenic.simulators.replay.parse_bag as parse_bag
 import time
 
 from PIL import Image
@@ -88,10 +86,9 @@ class ReplaySimulation(DrivingSimulation):
         if timestep is None:
             timestep = 0.1
 
-        description = json.load(open(_globalParameters["description"]))
-        self.ros_data: pd.DataFrame = parse_bag.bag_to_dataframe(_globalParameters["bag"], description)
-        self.row = self.ros_data.iterrows()
-        for _, r in self.ros_data.iterrows():
+        self.sim_data: pd.DataFrame = _globalParameters["sim_data"]
+        self.row = self.sim_data.iterrows()
+        for _, r in self.sim_data.iterrows():
             self.now_time = r.Timestamp
             break
         self.obj_from_id = {}
