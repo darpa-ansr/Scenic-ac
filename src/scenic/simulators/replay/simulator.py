@@ -82,6 +82,11 @@ class ReplaySimulation(DrivingSimulation):
         self.render = render
         self.network = network
         self.frames = []
+        # TODO: Make targets_reported a proper scenario object (maybe). The variable
+        # should never be modified in the scenario file, so it probably does not need to
+        # be integrated into the grammar. Should only be used in require statements and
+        # monitors.
+        self.targets_reported = scene.dynamicScenario._dummyNamespace["targets_reported"]
 
         if timestep is None:
             timestep = 0.1
@@ -177,12 +182,29 @@ class ReplaySimulation(DrivingSimulation):
     def isOnScreen(self, x, y):
         return self.min_x <= x <= self.max_x and self.min_y <= y <= self.max_y
 
+    def clear_targets_reported(self):
+        """
+        Clears targets_reported array.
+        """
+        # NOTE: The original list object must be maintained to allow require property monitors
+        # which are implemented as closures, depending on targets_reported to work. Replacing
+        # this code with the more natural `self.targets_reported = []` creates a new list,
+        # disconnecting the class variable from the scenario variable, and the scenario variable
+        # used in require statements will no longer be updated.
+        while self.targets_reported != []:
+            self.targets_reported.pop()
+
     def step(self):
+        self.clear_targets_reported()
         for i, msg in self.row:
             if msg.Event == "GT_POSITION":
                 self.obj_from_id[msg.EntityID].position = Vector(msg.PositionX, msg.PositionY)
             elif msg.Event == "ODOM":
                 self.obj_from_id["ego"].position = Vector(msg.WorldX, msg.WorldY)
+            elif msg.Event == "MSG":
+                target = self.obj_from_id[msg.EntityID]._copyWith(overrides={"PositionX": msg.PositionX,
+                                                                             "PositionY": msg.PositionY})
+                self.targets_reported.append(target)
             # TODO: Need to stop one row earlier
             if msg.Timestamp > self.now_time + self.timestep:
                 self.now_time = msg.Timestamp
@@ -192,8 +214,7 @@ class ReplaySimulation(DrivingSimulation):
             pygame.event.pump()
 
     def draw_objects(self):
-        self.screen.blit(self.map, (0, 0)) #.fill((255, 255, 255))
-        # self.screen.fill((255, 255, 255))
+        self.screen.blit(self.map, (0, 0))
         # for screenPoints, color, width in self.network_polygons:
         #     pygame.draw.lines(self.screen, color, False, screenPoints, width=width)
 

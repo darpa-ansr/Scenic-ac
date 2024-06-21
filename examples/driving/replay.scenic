@@ -18,3 +18,11 @@ targetCar = new Car with id "car4006"
 
 ego = new Car with id "ego", with behavior Idle
 ego.color = (0,0,1)
+
+# Putting targetCar in the list causes targets_reported to be typed as scenic.core.distributions.TupleDistribution,
+# which causes problems in replay.simulator.step(). Because, for example, it isn't allowed to be used
+# for control flow, i.e., cannot appear in conditional statements.
+targets_reported = []
+
+# Note: This effectively implements `eventually (\/ t in targets_reported: t.id == "car4006") 
+require eventually any([x.id=="car4006" for x in targets_reported])
