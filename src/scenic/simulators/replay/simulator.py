@@ -6,6 +6,7 @@ from math import copysign, degrees, radians, sin
 import os
 import pathlib
 import pandas as pd
+import scipy
 import time
 
 from PIL import Image
@@ -198,12 +199,29 @@ class ReplaySimulation(DrivingSimulation):
         self.clear_targets_reported()
         for i, msg in self.row:
             if msg.Event == "GT_POSITION":
-                self.obj_from_id[msg.EntityID].position = Vector(msg.PositionX, msg.PositionY)
+                obj = self.obj_from_id[msg.EntityID]
+                obj.position = Vector(msg.X, msg.Y, msg.Z)
+                obj.roll = msg.Roll
+                obj.pitch = msg.Pitch
+                obj.yaw = msg.Yaw
             elif msg.Event == "ODOM":
-                self.obj_from_id["ego"].position = Vector(msg.WorldX, msg.WorldY)
+                obj = self.obj_from_id["ego"]
+                obj.position = Vector(msg.X, msg.Y, msg.Z)
+                obj.velocity = Vector(msg.Xdot, msg.Ydot, msg.Zdot)
+                obj.speed = scipy.linalg.norm([msg.Xdot, msg.Ydot, msg.Zdot])
+                obj.angularVelocity = Vector(msg.Surge, msg.Heave, msg.Sway)
+                obj.angularSpeed = msg.Sway
+                obj.roll = msg.Roll
+                obj.pitch = msg.Pitch
+                obj.yaw = msg.Yaw
             elif msg.Event == "MSG":
-                target = self.obj_from_id[msg.EntityID]._copyWith(overrides={"PositionX": msg.PositionX,
-                                                                             "PositionY": msg.PositionY})
+                overrides={"position": Vector(msg.X, msg.Y, msg.Z),
+                           "roll": msg.Roll,
+                           "pitch": msg.Pitch,
+                           "yaw": msg.Yaw,
+                           "color": msg.Color
+                           }
+                target = self.obj_from_id[msg.EntityID]._copyWith(overrides=overrides)
                 self.targets_reported.append(target)
             # TODO: Need to stop one row earlier
             if msg.Timestamp > self.now_time + self.timestep:
