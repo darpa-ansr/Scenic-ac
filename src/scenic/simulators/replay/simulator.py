@@ -115,7 +115,7 @@ class ReplaySimulation(DrivingSimulation):
             self.screen = pygame.display.set_mode(
                 (WIDTH, HEIGHT), pygame.HWSURFACE | pygame.DOUBLEBUF
             )
-            img_path = _globalParameters["topo_map"]
+            img_path = _globalParameters["map_data"]
             self.map = pygame.image.load(img_path)
             self.screen.blit(self.map, (0, 0)) #.fill((255, 255, 255))
             x, y, _ = self.objects[0].position
@@ -137,11 +137,11 @@ class ReplaySimulation(DrivingSimulation):
             self.car_width = 10*int(3.5 * WIDTH / self.size_x)
             self.car_height = self.car_width
             self.car = pygame.transform.scale(self.car, (self.car_width, self.car_height))
-            img_path = os.path.join(current_dir, "blue_car.png")
-            self.blue_car = pygame.image.load(img_path)
-            self.blue_car = pygame.transform.scale(self.blue_car, (self.car_width, self.car_height))
-            self.parse_network()
-            self.draw_objects()
+            img_path = os.path.join(current_dir, "drone.png")
+            self.blue_drone = pygame.image.load(img_path)
+            self.blue_drone = pygame.transform.scale(self.blue_drone, (self.car_width, self.car_height))
+            # Reverse objects so that ego is always drawn last
+            self.objects.reverse()
 
     def parse_network(self):
         self.network_polygons = []
@@ -219,7 +219,8 @@ class ReplaySimulation(DrivingSimulation):
                            "roll": msg.Roll,
                            "pitch": msg.Pitch,
                            "yaw": msg.Yaw,
-                           "color": msg.Color
+                           "color": msg.Color,
+                           "vehicle_type": msg.Type
                            }
                 target = self.obj_from_id[msg.EntityID]._copyWith(overrides=overrides)
                 self.targets_reported.append(target)
@@ -246,9 +247,9 @@ class ReplaySimulation(DrivingSimulation):
             x, y = self.scenicToScreenVal(obj.position)
             rect_x, rect_y = self.scenicToScreenVal(obj.position + pos_vec)
             if hasattr(obj, "isCar") and obj.isCar:
-                if hasattr(obj, "color") and obj.color == (0,0,1):
+                if obj.id == "ego":
                     self.rotated_car = pygame.transform.rotate(
-                        self.blue_car, math.degrees(obj.heading)
+                        self.blue_drone, math.degrees(obj.heading)
                     )
                     self.screen.blit(self.rotated_car, (rect_x, rect_y))
                 else:

@@ -40,6 +40,7 @@ from scenic.domains.driving.workspace import DrivingWorkspace
 from scenic.domains.driving.roads import (ManeuverType, Network, Road, Lane, LaneSection,
                                           LaneGroup, Intersection, PedestrianCrossing,
                                           NetworkElement)
+from scenic.core.regions import PolygonalRegion
 from scenic.domains.driving.actions import *
 from scenic.domains.driving.behaviors import *
 
@@ -54,23 +55,38 @@ def is2DMode():
 
 param use2DMap = True if is2DMode() else False
 
-if is2DMode() and not globalParameters.use2DMap:
+if is2DMode() and (not globalParameters.use2DMap):
     raise RuntimeError('in 2D mode, global parameter "use2DMap" must be True')
 
 # Note: The following should be removed when 3D maps are supported
-if not globalParameters.use2DMap:
+if (not globalParameters.use2DMap) and ("replay" in globalParameters) and (not globalParameters.replay):
     raise RuntimeError('3D maps not supported at this time.'
         '(to use 2D maps set global parameter "use2DMap" to True)')
 
 ## Load map and set up workspace
-
-if 'map' not in globalParameters:
+if ("replay" in globalParameters) and (globalParameters.replay is True):
+    # TODO: None of the road network stuff is really relevant to replay simulator. Replay should be
+    # moved out of the driving domain so that it does not require a road layout. For now, we just
+    # make a dummy road network that consists of a single driveable region that covers the whole
+    # map.
+    network = Network(elements={},
+                    roads=[],
+                    connectingRoads=[],
+                    laneGroups=[],
+                    lanes=[],
+                    intersections=[],
+                    crossings=[],
+                    sidewalks=[],
+                    shoulders=[],
+                    drivableRegion=PolygonalRegion(((-500, 500),(500, 500), (500, -500), (-500, -500))))
+elif 'map' not in globalParameters:
     raise RuntimeError('need to specify map before importing driving model '
                        '(set the global parameter "map")')
-param map_options = {}
+else:
+    param map_options = {}
 
-#: The road network being used for the scenario, as a `Network` object.
-network : Network = Network.fromFile(globalParameters.map, **globalParameters.map_options)
+    #: The road network being used for the scenario, as a `Network` object.
+    network : Network = Network.fromFile(globalParameters.map, **globalParameters.map_options)
 
 workspace = DrivingWorkspace(network)
 
