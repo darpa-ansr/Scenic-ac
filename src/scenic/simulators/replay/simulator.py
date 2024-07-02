@@ -83,11 +83,6 @@ class ReplaySimulation(DrivingSimulation):
         self.render = render
         self.network = network
         self.frames = []
-        # TODO: Make targets_reported a proper scenario object (maybe). The variable
-        # should never be modified in the scenario file, so it probably does not need to
-        # be integrated into the grammar. Should only be used in require statements and
-        # monitors.
-        self.targets_reported = scene.dynamicScenario._dummyNamespace["targets_reported"]
 
         if timestep is None:
             timestep = 0.1
@@ -142,6 +137,8 @@ class ReplaySimulation(DrivingSimulation):
             self.blue_drone = pygame.transform.scale(self.blue_drone, (self.car_width, self.car_height))
             # Reverse objects so that ego is always drawn last
             self.objects.reverse()
+            # Save reference to the ego.targets_reported
+            self.targets_reported = self.obj_from_id["ego"].targets_reported
 
     def parse_network(self):
         self.network_polygons = []
@@ -246,21 +243,16 @@ class ReplaySimulation(DrivingSimulation):
             dx, dy = int(heading_vec.x), -int(heading_vec.y)
             x, y = self.scenicToScreenVal(obj.position)
             rect_x, rect_y = self.scenicToScreenVal(obj.position + pos_vec)
-            if hasattr(obj, "isCar") and obj.isCar:
-                if obj.id == "ego":
-                    self.rotated_car = pygame.transform.rotate(
-                        self.blue_drone, math.degrees(obj.heading)
-                    )
-                    self.screen.blit(self.rotated_car, (rect_x, rect_y))
-                else:
-                    self.rotated_car = pygame.transform.rotate(
-                        self.car, math.degrees(obj.heading)
-                    )
-                    self.screen.blit(self.rotated_car, (rect_x, rect_y))
-            else:
-                corners = [self.scenicToScreenVal(corner) for corner in obj._corners2D]
-                pygame.draw.polygon(self.screen, color, corners)
-
+            if obj.id == "ego":
+                self.rotated_car = pygame.transform.rotate(
+                    self.blue_drone, math.degrees(obj.heading)
+                )
+                self.screen.blit(self.rotated_car, (rect_x, rect_y))
+            elif hasattr(obj, "isCar") and obj.isCar:
+                self.rotated_car = pygame.transform.rotate(
+                    self.car, math.degrees(obj.heading)
+                )
+                self.screen.blit(self.rotated_car, (rect_x, rect_y))
         pygame.display.update()
 
         if self.export_gif:
