@@ -1,14 +1,17 @@
 param time_step = 1.0/10
 param replay = True
 
+import json
 import math
 import pandas
 import scenic.formats.parse_bag as parse_bag
-from scenic.core.dynamics.actions import _EndSimulationAction
 
-base_dir = localPath("../replay_test")
+import scenic_ansr
+
+base_dir = localPath("replay_test")
 bag_path = base_dir.joinpath("bags_0.mcap")
 description_path = base_dir.joinpath("description.json")
+description = json.load(open(description_path))
 
 param sim_data = parse_bag.bag_to_dataframe(bag_path, description_path)
 param map_data = base_dir.joinpath("neighborhood_grid.png")
@@ -23,14 +26,38 @@ behavior Idle():
     while True:
         if self.targets_reported != []:
             print(self.targets_reported)
+        # print(all([not (ego.position in z.region) for z in keep_out_zones]))
         wait
 
 ego = new UAVObject with id "ego", with behavior Idle
 
 car4006 = new Car with id "car4006", with color (0,1,0), with vehicle_type "SEDAN"
 
+keep_out_zones = scenic_ansr.parse_koz(description)
 targets_groundtruth = [car4006]
 targets_reported = ego.targets_reported
+
+# require always not ego.position in keep_out_zones[1].region
+# always
+#    /\ z in keep_out_zones: not in_region(z.region, ego.pose.position)
+
+# This should work per Daniel Fremont's email but errors out
+# for z in keep_out_zones:
+#     require always not (ego.position in z.region)
+
+# THIS WORKS
+require always all([(ego.position not in z.region) for z in keep_out_zones])
+
+# but this never fails like it should
+# require always all([not (ego.position in z.region) for z in keep_out_zones])
+
+# There is a problem combining `always`, `all`, and `not`
+#
+# This
+#   require always all([not True])
+# never fails but this
+#   require always all([False])
+# fails as expected.
 
 # This implements `eventually (\/ t in targets_reported: t.id == "car4006")
 require eventually any([x.id=="car4006" for x in targets_reported])
@@ -81,5 +108,6 @@ monitor AllTargetsEventuallyFound():
 
 require monitor AllTargetsEventuallyFound()
 
+# Terminate the simulation when the end of the mission is reached
 sim_time_end = float(globalParameters["sim_data"].tail(1).Timestamp.values[0])
 terminate when (sim_time_end - ego.T) < globalParameters["time_step"]
