@@ -1,8 +1,10 @@
 param time_step = 1.0/10
 param replay = True
 
+import math
 import pandas
 import scenic.formats.parse_bag as parse_bag
+from scenic.core.dynamics.actions import _EndSimulationAction
 
 base_dir = localPath("../replay_test")
 bag_path = base_dir.joinpath("bags_0.mcap")
@@ -15,6 +17,7 @@ model scenic.domains.driving.model
 
 class UAVObject(Object):
     targets_reported: []
+    T: -math.inf
 
 behavior Idle():
     while True:
@@ -27,12 +30,6 @@ ego = new UAVObject with id "ego", with behavior Idle
 car4006 = new Car with id "car4006", with color (0,1,0), with vehicle_type "SEDAN"
 
 targets_groundtruth = [car4006]
-
-# NOTE: Putting a Car in the list causes targets_reported to be typed as
-# scenic.core.distributions.TupleDistribution, which causes problems in replay.simulator.step().
-# Because, for example, it isn't allowed to be used for control flow, i.e., cannot appear in
-# conditional statements.
-
 targets_reported = ego.targets_reported
 
 # This implements `eventually (\/ t in targets_reported: t.id == "car4006")
@@ -59,11 +56,21 @@ require eventually all([
 #                 in_region(q.pose.position, p.bounding_box)
 #             )
 #     )
+
+# require all([
+#     eventually any([
+#         x.id == y.id and distance from x to y < 2*x.width for x in targets_reported])
+#         for y in targets_groundtruth])
+
+# Can't use eventually inside a list comprehension?
+# require all([(eventually (y.id == "car4006")) for y in targets_groundtruth])
+
+# The monitor never reaches the last `require` because termination happens earlier.
 monitor AllTargetsEventuallyFound():
     targets = [x.id for x in targets_groundtruth]
     targets_found = set()
     print(f"Started: {targets}")
-    while True:
+    while (sim_time_end - ego.T) > globalParameters["time_step"]:
         for y in targets_reported:
             for x in targets_groundtruth:
                 if (x.id == y.id) and (distance from x.position to y.position < 5):
@@ -73,3 +80,6 @@ monitor AllTargetsEventuallyFound():
     require len(targets_found) == len(targets)
 
 require monitor AllTargetsEventuallyFound()
+
+sim_time_end = float(globalParameters["sim_data"].tail(1).Timestamp.values[0])
+terminate when (sim_time_end - ego.T) < globalParameters["time_step"]

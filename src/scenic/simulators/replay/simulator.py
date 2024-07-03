@@ -88,10 +88,8 @@ class ReplaySimulation(DrivingSimulation):
             timestep = 0.1
 
         self.sim_data: pd.DataFrame = _globalParameters["sim_data"]
-        self.row = self.sim_data.iterrows()
-        for _, r in self.sim_data.iterrows():
-            self.now_time = r.Timestamp
-            break
+        self.sim_data_iterrows = self.sim_data.iterrows()
+        self.now_time: float = float(self.sim_data.head(1).Timestamp.values[0])
         self.obj_from_id = {}
         super().__init__(scene, timestep=timestep, **kwargs)
 
@@ -194,7 +192,7 @@ class ReplaySimulation(DrivingSimulation):
 
     def step(self):
         self.clear_targets_reported()
-        for i, msg in self.row:
+        for i, msg in self.sim_data_iterrows:
             if msg.Event == "GT_POSITION":
                 obj = self.obj_from_id[msg.EntityID]
                 obj.position = Vector(msg.X, msg.Y, msg.Z)
@@ -224,6 +222,7 @@ class ReplaySimulation(DrivingSimulation):
             # TODO: Need to stop one row earlier
             if msg.Timestamp > self.now_time + self.timestep:
                 self.now_time = msg.Timestamp
+                self.obj_from_id["ego"].T = self.now_time
                 break
         if self.render:
             self.draw_objects()
