@@ -11,10 +11,14 @@ import scenic_ansr
 base_dir = localPath("replay_test")
 bag_path = base_dir.joinpath("bags_0.mcap")
 description_path = base_dir.joinpath("description.json")
+param map_data = base_dir.joinpath("neighborhood_grid.png")
+
+base_dir = localPath("/home/genindi1/projects/ANSR/verifai_test-1714596921/1714596976-collect_bag_apltest_as_p_pr_r23_0/")
+bag_path = base_dir.joinpath("outputs/bags_0.mcap")
+description_path = base_dir.joinpath("inputs/generated_missions/1714593617-set/Perception/AreaSearch/AS_P_PR_R23_0/description.json")
 description = json.load(open(description_path))
 
 param sim_data = parse_bag.bag_to_dataframe(bag_path, description_path)
-param map_data = base_dir.joinpath("neighborhood_grid.png")
 
 model scenic.domains.driving.model
 
@@ -31,10 +35,15 @@ behavior Idle():
 
 ego = new UAVObject with id "ego", with behavior Idle
 
-car4006 = new Car with id "car4006", with color (0,1,0), with vehicle_type "SEDAN"
+# car4006 = new Car with id "car4006", with color (0,1,0), with vehicle_type "SEDAN"
+car000 = new Car with id "car000", with color (1,0.5,0), with vehicle_type "SUV"
+car001 = new Car with id "car001", with color (1,0,1), with vehicle_type "SUV"
+car002 = new Car with id "car002", with color (0,0,1), with vehicle_type "SEDAN"
+car003 = new Car with id "car003", with color (0,0,1), with vehicle_type "SEDAN"
 
 keep_out_zones = scenic_ansr.parse_koz(description)
-targets_groundtruth = [car4006]
+# targets_groundtruth = [car4006]
+targets_groundtruth = [car000, car001, car002, car003]
 targets_reported = ego.targets_reported
 
 # require always not ego.position in keep_out_zones[1].region

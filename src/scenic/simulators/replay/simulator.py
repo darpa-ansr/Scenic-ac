@@ -81,7 +81,6 @@ class ReplaySimulation(DrivingSimulation):
     def __init__(self, scene, network, render, export_gif, timestep, **kwargs):
         self.export_gif = export_gif
         self.render = render
-        self.network = network
         self.frames = []
 
         if timestep is None:
@@ -91,12 +90,16 @@ class ReplaySimulation(DrivingSimulation):
         self.sim_data_iterrows = self.sim_data.iterrows()
         self.now_time: float = float(self.sim_data.head(1).Timestamp.values[0])
         self.obj_from_id = {}
+        self.ego = None
         super().__init__(scene, timestep=timestep, **kwargs)
 
     def setup(self):
         super().setup()
         for obj in self.objects:
+            if obj.id == "ego":
+                self.ego = obj
             self.obj_from_id[obj.id] = obj
+        assert self.ego is not None
 
         if self.render:
             # determine window size
@@ -135,32 +138,8 @@ class ReplaySimulation(DrivingSimulation):
             self.blue_drone = pygame.transform.scale(self.blue_drone, (self.car_width, self.car_height))
             # Reverse objects so that ego is always drawn last
             self.objects.reverse()
-            # Save reference to the ego.targets_reported
-            self.targets_reported = self.obj_from_id["ego"].targets_reported
-
-    def parse_network(self):
-        self.network_polygons = []
-        if not self.network:
-            return
-
-        def addRegion(region, color, width=1):
-            poly = toPolygon(region)
-            if not poly or not self.screen_poly.intersects(poly):
-                return
-            for chain in allChains(poly):
-                coords = tuple(self.scenicToScreenVal(pt) for pt in chain.coords)
-                self.network_polygons.append((coords, color, width))
-
-        addRegion(self.network.walkableRegion, SIDEWALK_COLOR)
-        addRegion(self.network.shoulderRegion, SHOULDER_COLOR)
-        for road in self.network.roads:  # loop over main roads
-            for lane in road.lanes:
-                addRegion(lane.leftEdge, LANE_COLOR)
-                addRegion(lane.rightEdge, LANE_COLOR)
-            addRegion(road, ROAD_COLOR, ROAD_WIDTH)
-        for lane in self.network.lanes:  # loop over all lanes, even in intersections
-            addRegion(lane.centerline, CENTERLINE_COLOR)
-        addRegion(self.network.intersectionRegion, ROAD_COLOR)
+            # Update ego time variable
+            self.ego.T = self.now_time
 
     def scenicToScreenVal(self, pos):
         x, y = pos[:2]
@@ -187,11 +166,12 @@ class ReplaySimulation(DrivingSimulation):
         # this code with the more natural `self.targets_reported = []` creates a new list,
         # disconnecting the class variable from the scenario variable, and the scenario variable
         # used in require statements will no longer be updated.
-        while self.targets_reported != []:
-            self.targets_reported.pop()
+        while self.ego.targets_reported != []:
+            self.ego.targets_reported.pop()
 
     def step(self):
         self.clear_targets_reported()
+        self.ego.collision = False
         for i, msg in self.sim_data_iterrows:
             if msg.Event == "GT_POSITION":
                 obj = self.obj_from_id[msg.EntityID]
@@ -199,16 +179,17 @@ class ReplaySimulation(DrivingSimulation):
                 obj.roll = msg.Roll
                 obj.pitch = msg.Pitch
                 obj.yaw = msg.Yaw
+                obj.heading = obj.yaw
             elif msg.Event == "ODOM":
-                obj = self.obj_from_id["ego"]
-                obj.position = Vector(msg.X, msg.Y, msg.Z)
-                obj.velocity = Vector(msg.Xdot, msg.Ydot, msg.Zdot)
-                obj.speed = scipy.linalg.norm([msg.Xdot, msg.Ydot, msg.Zdot])
-                obj.angularVelocity = Vector(msg.Surge, msg.Heave, msg.Sway)
-                obj.angularSpeed = msg.Sway
-                obj.roll = msg.Roll
-                obj.pitch = msg.Pitch
-                obj.yaw = msg.Yaw
+                self.ego.position = Vector(msg.X, msg.Y, msg.Z)
+                self.ego.velocity = Vector(msg.Xdot, msg.Ydot, msg.Zdot)
+                self.ego.speed = scipy.linalg.norm([msg.Xdot, msg.Ydot, msg.Zdot])
+                self.ego.angularVelocity = Vector(msg.Surge, msg.Heave, msg.Sway)
+                self.ego.angularSpeed = msg.Sway
+                self.ego.roll = msg.Roll
+                self.ego.pitch = msg.Pitch
+                self.ego.yaw = msg.Yaw
+                self.ego.heading = self.ego.yaw
             elif msg.Event == "MSG":
                 overrides={"position": Vector(msg.X, msg.Y, msg.Z),
                            "roll": msg.Roll,
@@ -218,11 +199,13 @@ class ReplaySimulation(DrivingSimulation):
                            "vehicle_type": msg.Type
                            }
                 target = self.obj_from_id[msg.EntityID]._copyWith(overrides=overrides)
-                self.targets_reported.append(target)
+                self.ego.targets_reported.append(target)
+            elif msg.Event == "CLSN":
+                self.ego.collision = True
             # TODO: Need to stop one row earlier
             if msg.Timestamp > self.now_time + self.timestep:
                 self.now_time = msg.Timestamp
-                self.obj_from_id["ego"].T = self.now_time
+                self.ego.T = self.now_time
                 break
         if self.render:
             self.draw_objects()
@@ -230,11 +213,8 @@ class ReplaySimulation(DrivingSimulation):
 
     def draw_objects(self):
         self.screen.blit(self.map, (0, 0))
-        # for screenPoints, color, width in self.network_polygons:
-        #     pygame.draw.lines(self.screen, color, False, screenPoints, width=width)
 
         for i, obj in enumerate(self.objects):
-            color = (255, 0, 0) if i == 0 else (0, 0, 255)
             h, w = obj.length, obj.width
             pos_vec = Vector(-1.75, 1.75)
             neg_vec = Vector(w / 2, h / 2)
@@ -242,16 +222,26 @@ class ReplaySimulation(DrivingSimulation):
             dx, dy = int(heading_vec.x), -int(heading_vec.y)
             x, y = self.scenicToScreenVal(obj.position)
             rect_x, rect_y = self.scenicToScreenVal(obj.position + pos_vec)
+            pygame.draw.circle(self.screen, (255,0,0), (0,0), 100)
             if obj.id == "ego":
-                self.rotated_car = pygame.transform.rotate(
+                self.rotated_drone = pygame.transform.rotate(
                     self.blue_drone, math.degrees(obj.heading)
                 )
-                self.screen.blit(self.rotated_car, (rect_x, rect_y))
+                self.screen.blit(self.rotated_drone, (rect_x, rect_y))
             elif hasattr(obj, "isCar") and obj.isCar:
                 self.rotated_car = pygame.transform.rotate(
                     self.car, math.degrees(obj.heading)
                 )
-                self.screen.blit(self.rotated_car, (rect_x, rect_y))
+                color = tuple([int(x*255) for x in obj.color])
+                # TODO: Check that this gives top left corner
+                left_top = self.scenicToScreenVal(obj.position + pos_vec)
+                width_height = (self.car_width, self.car_height)
+                if obj.vehicle_type == "SUV":
+                    pygame.draw.rect(self.screen, color, pygame.Rect(left_top, width_height))
+                elif obj.vehicle_type == "SEDAN":
+                    pygame.draw.circle(self.screen, color, (x,y), w)
+                else:
+                    assert False
         pygame.display.update()
 
         if self.export_gif:
@@ -285,39 +275,3 @@ class ReplaySimulation(DrivingSimulation):
     def destroy(self):
         if self.render:
             pygame.quit()
-
-    def getLaneFollowingControllers(self, agent):
-        dt = self.timestep
-        if agent.isCar:
-            lon_controller = PIDLongitudinalController(K_P=0.5, K_D=0.1, K_I=0.7, dt=dt)
-            lat_controller = PIDLateralController(K_P=0.1, K_D=0.1, K_I=0.02, dt=dt)
-        else:
-            lon_controller = PIDLongitudinalController(
-                K_P=0.25, K_D=0.025, K_I=0.0, dt=dt
-            )
-            lat_controller = PIDLateralController(K_P=0.2, K_D=0.1, K_I=0.0, dt=dt)
-        return lon_controller, lat_controller
-
-    def getTurningControllers(self, agent):
-        dt = self.timestep
-        if agent.isCar:
-            lon_controller = PIDLongitudinalController(K_P=0.5, K_D=0.1, K_I=0.7, dt=dt)
-            lat_controller = PIDLateralController(K_P=0.2, K_D=0.2, K_I=0.2, dt=dt)
-        else:
-            lon_controller = PIDLongitudinalController(
-                K_P=0.25, K_D=0.025, K_I=0.0, dt=dt
-            )
-            lat_controller = PIDLateralController(K_P=0.4, K_D=0.1, K_I=0.0, dt=dt)
-        return lon_controller, lat_controller
-
-    def getLaneChangingControllers(self, agent):
-        dt = self.timestep
-        if agent.isCar:
-            lon_controller = PIDLongitudinalController(K_P=0.5, K_D=0.1, K_I=0.7, dt=dt)
-            lat_controller = PIDLateralController(K_P=0.2, K_D=0.2, K_I=0.02, dt=dt)
-        else:
-            lon_controller = PIDLongitudinalController(
-                K_P=0.25, K_D=0.025, K_I=0.0, dt=dt
-            )
-            lat_controller = PIDLateralController(K_P=0.1, K_D=0.3, K_I=0.0, dt=dt)
-        return lon_controller, lat_controller
