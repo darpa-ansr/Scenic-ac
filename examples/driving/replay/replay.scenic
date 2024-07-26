@@ -8,19 +8,16 @@ import scenic.formats.parse_bag as parse_bag
 
 import scenic_ansr
 
-base_dir = localPath("replay_test")
+base_dir = localPath("sim_data")
 bag_path = base_dir.joinpath("bags_0.mcap")
 description_path = base_dir.joinpath("description.json")
 param map_data = base_dir.joinpath("neighborhood_grid.png")
 
-base_dir = localPath("/home/genindi1/projects/ANSR/verifai_test-1714596921/1714596976-collect_bag_apltest_as_p_pr_r23_0/")
-bag_path = base_dir.joinpath("outputs/bags_0.mcap")
-description_path = base_dir.joinpath("inputs/generated_missions/1714593617-set/Perception/AreaSearch/AS_P_PR_R23_0/description.json")
 description = json.load(open(description_path))
 
 param sim_data = parse_bag.bag_to_dataframe(bag_path, description_path)
 
-model scenic.domains.driving.model
+model scenic.domains.driving.replay
 
 class UAVObject(Object):
     targets_reported: []
@@ -35,14 +32,28 @@ behavior Idle():
 
 ego = new UAVObject with id "ego", with behavior Idle
 
-# car4006 = new Car with id "car4006", with color (0,1,0), with vehicle_type "SEDAN"
 car000 = new Car with id "car000", with color (1,0.5,0), with vehicle_type "SUV"
 car001 = new Car with id "car001", with color (1,0,1), with vehicle_type "SUV"
 car002 = new Car with id "car002", with color (0,0,1), with vehicle_type "SEDAN"
 car003 = new Car with id "car003", with color (0,0,1), with vehicle_type "SEDAN"
 
+# Do not sample
+ego._needsSampling = False
+car000._needsSampling = False
+car001._needsSampling = False
+car002._needsSampling = False
+car003._needsSampling = False
+
+# Do not check for collisions
+# NOTE: Because objects are not sampled at the start of the simulation
+#       they seem to be spawned in overlapping positions
+ego.allowCollisions = True
+car000.allowCollisions = True
+car001.allowCollisions = True
+car002.allowCollisions = True
+car003.allowCollisions = True
+
 keep_out_zones = scenic_ansr.parse_koz(description)
-# targets_groundtruth = [car4006]
 targets_groundtruth = [car000, car001, car002, car003]
 targets_reported = ego.targets_reported
 
@@ -68,17 +79,29 @@ require always all([(ego.position not in z.region) for z in keep_out_zones])
 #   require always all([False])
 # fails as expected.
 
-# This implements `eventually (\/ t in targets_reported: t.id == "car4006")
-require eventually any([x.id=="car4006" for x in targets_reported])
-
 # This implements
 #`eventually (/\ x in targets_groundtruth :
 #   (\/ y intargets_reported: x.id == y.id and (distance from x.position to y.position < 2*x.width)))`
 require eventually all([
+            any([((y.id == x.id) and (distance from x.position to y.position < 2*x.width))
+                for y in ego.targets_reported])
+            for x in targets_groundtruth])
+
+require eventually all([
+            any([distance from x.position to y.position < 2*x.width
+                for y in targets_reported if y.id == x.id])
+            for x in targets_groundtruth])
+
+monitor AllTargetsFound():
+    while True:
+        print(all([
             any([
                 ((y.id == x.id) and (distance from x.position to y.position < 2*x.width))
-                for y in targets_reported])
-            for x in targets_groundtruth])
+                for y in ego.targets_reported])
+            for x in targets_groundtruth]))
+        wait
+
+# require monitor AllTargetsFound()
 
 # Attempting to implement example from https://github.com/darpa-ansr/assurance-claims/blob/main/eval01/doc/example_map.md
 # true ->
@@ -93,29 +116,11 @@ require eventually all([
 #             )
 #     )
 
+# NOTE: Cannot have eventually inside the list comprehension
 # require all([
 #     eventually any([
 #         x.id == y.id and distance from x to y < 2*x.width for x in targets_reported])
 #         for y in targets_groundtruth])
-
-# Can't use eventually inside a list comprehension?
-# require all([(eventually (y.id == "car4006")) for y in targets_groundtruth])
-
-# The monitor never reaches the last `require` because termination happens earlier.
-monitor AllTargetsEventuallyFound():
-    targets = [x.id for x in targets_groundtruth]
-    targets_found = set()
-    print(f"Started: {targets}")
-    while (sim_time_end - ego.T) > globalParameters["time_step"]:
-        for y in targets_reported:
-            for x in targets_groundtruth:
-                if (x.id == y.id) and (distance from x.position to y.position < 5):
-                    targets_found.add(y.id)
-        wait
-    print("Done")
-    require len(targets_found) == len(targets)
-
-require monitor AllTargetsEventuallyFound()
 
 # Terminate the simulation when the end of the mission is reached
 sim_time_end = float(globalParameters["sim_data"].tail(1).Timestamp.values[0])

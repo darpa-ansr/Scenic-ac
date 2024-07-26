@@ -27,7 +27,6 @@ from scenic.domains.driving.controllers import (
     PIDLateralController,
     PIDLongitudinalController,
 )
-from scenic.domains.driving.roads import Network
 from scenic.domains.driving.simulators import DrivingSimulation, DrivingSimulator
 from scenic.syntax.veneer import verbosePrint, _globalParameters
 
@@ -60,15 +59,14 @@ class ReplaySimulator(DrivingSimulator):
         when not otherwise specified is still 0.1 seconds.
     """
 
-    def __init__(self, network=None, render=False, export_gif=False):
+    def __init__(self, render=False, export_gif=False):
         super().__init__()
         self.export_gif = export_gif
         self.render = render
-        self.network = network
 
     def createSimulation(self, scene, **kwargs):
         simulation = ReplaySimulation(
-            scene, self.network, self.render, self.export_gif, **kwargs
+            scene, self.render, self.export_gif, **kwargs
         )
         if self.export_gif and self.render:
             simulation.generate_gif("simulation.gif")
@@ -78,7 +76,7 @@ class ReplaySimulator(DrivingSimulator):
 class ReplaySimulation(DrivingSimulation):
     """Implementation of `Simulation` for the Replay simulator."""
 
-    def __init__(self, scene, network, render, export_gif, timestep, **kwargs):
+    def __init__(self, scene, render, export_gif, timestep, **kwargs):
         self.export_gif = export_gif
         self.render = render
         self.frames = []
@@ -222,7 +220,7 @@ class ReplaySimulation(DrivingSimulation):
             dx, dy = int(heading_vec.x), -int(heading_vec.y)
             x, y = self.scenicToScreenVal(obj.position)
             rect_x, rect_y = self.scenicToScreenVal(obj.position + pos_vec)
-            pygame.draw.circle(self.screen, (255,0,0), (0,0), 100)
+            # pygame.draw.circle(self.screen, (255,0,0), (0,0), 100)
             if obj.id == "ego":
                 self.rotated_drone = pygame.transform.rotate(
                     self.blue_drone, math.degrees(obj.heading)
@@ -249,7 +247,7 @@ class ReplaySimulation(DrivingSimulation):
             frame = np.transpose(frame, (1, 0, 2))
             self.frames.append(frame)
 
-        time.sleep(self.timestep/10)
+        time.sleep(self.timestep/100)
 
     def generate_gif(self, filename="simulation.gif"):
         imgs = [Image.fromarray(frame) for frame in self.frames]

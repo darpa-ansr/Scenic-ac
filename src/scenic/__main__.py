@@ -160,8 +160,6 @@ if args.replay is True:
     args.count = 0
     args.simulate = True
     args.model = "scenic.simulators.replay.driving_model"
-    # mode2D = True
-    maxIterations = 1
 
 if not mode2D:
     if args.delay is not None:
@@ -278,10 +276,7 @@ try:
 
         successCount = 0
         while True:
-            if maxIterations is not None:
-                scene, _ = generateScene(maxIterations)
-            else:
-                scene, _ = generateScene()
+            scene, _ = generateScene()
             if args.simulate:
                 success = runSimulation(scene)
                 if success:

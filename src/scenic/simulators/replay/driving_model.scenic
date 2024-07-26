@@ -10,11 +10,11 @@ see the driving domain's documentation for details.
 
 from scenic.simulators.replay.model import *
 
-from scenic.domains.driving.model import *  # includes basic actions and behaviors
+from scenic.domains.driving.replay import *  # includes basic actions and behaviors
 
 from scenic.simulators.utils.colors import Color
 
-simulator ReplaySimulator(network, render=render)
+simulator ReplaySimulator(render=render)
 
 class ReplayActor(DrivingObject):
     throttle: 0
@@ -33,30 +33,15 @@ class ReplayActor(DrivingObject):
     def setVelocity(self, vel):
         self.velocity = vel
 
-    def setThrottle(self, throttle):
-        self.throttle = throttle
-
-    def setSteering(self, steering):
-        self.steer = steering
-
-    def setBraking(self, braking):
-        self.brake = braking
-
-    def setHandbrake(self, handbrake):
-        self.hand_brake = handbrake
-
-    def setReverse(self, reverse):
-        self.reverse = reverse
-
 class Vehicle(Vehicle, ReplayActor):
     pass
 
-class Car(Vehicle, Steers):
+class Car(Vehicle):
     @property
     def isCar(self):
         return True
 
-class Pedestrian(Pedestrian, ReplayActor, Walks):
+class Pedestrian(Pedestrian, ReplayActor):
     pass
 
 class Debris:
