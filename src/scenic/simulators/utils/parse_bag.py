@@ -29,7 +29,6 @@ PERCEPTION_TOPIC = '/adk_node/input/perception'
 GT_ODOMETRY_TOPIC = '/adk_node/SimpleFlight/odom_local_ned'
 COLLISION_TOPIC = '/adk_node/SimpleFlight/collision_state'
 
-
 def verify_bag_path(bag_path: Union[str, Path]) -> Path:
     """
     Checks whether a .tgz bag archive or .mcap bag file is present.
@@ -58,8 +57,7 @@ def verify_bag_path(bag_path: Union[str, Path]) -> Path:
                 raise BagFileDoesNotExistException
     return bag_path
 
-def bag_to_dataframe(bag_path: Union[str, Path],
-                     description: Union[str, Path]) -> pd.DataFrame:
+def bag_to_dataframe(bag_path: Union[str, Path], topics: list, entity_attribute_map: dict) -> pd.DataFrame:
     """
     Extracts ROS bag (archive) into an intermediate format used by various metrics computation
     classes in .metrics.
@@ -67,29 +65,12 @@ def bag_to_dataframe(bag_path: Union[str, Path],
     Returns pandas.DataFrame object.
     """
     bag_path = verify_bag_path(bag_path)
-    description_info = json.load(open(description))
-
-    POSE_VALID_TIME_TOLERANCE = 5
-    valid_topics = [PERCEPTION_TOPIC, GT_ODOMETRY_TOPIC, COLLISION_TOPIC]
-    eoi_topic = re.compile(r"/airsim_node/car[0-9]*/envcar_pose")
-    entity_attribute_map = {}
-    for eoi in description_info['scenario_objective']['entities_of_interest']:
-        entity_id: str = eoi['entity_id']
-        entity_attribute_map[entity_id] = eoi['attributes']
-        valid_topics.append(f'/airsim_node/{entity_id}/envcar_pose')
 
     data = []
     with open(bag_path, 'rb') as f:
-        decoders = {}
+        decoders: dict = {}
         bag_reader = make_reader(f, decoder_factories=[DecoderFactory()])
-        # TODO: Use this code to get dynamic ground truth EOI topics without relying on description.json
-        # summary = bag_reader.get_summary()
-        # if summary is not None:
-        #     for chan in summary.channels.values():
-        #             print(chan.topic, eoi_topic.match(chan.topic))
-        #             if eoi_topic.match(chan.topic) is not None:
-        #                 valid_topics.append(chan.topic)
-        for schema,channel,encoded_msg in bag_reader.iter_messages(topics=valid_topics):
+        for schema,channel,encoded_msg in bag_reader.iter_messages(topics=topics):
             if channel.topic not in decoders:
                 decoders[channel.topic] = DecoderFactory().decoder_for('cdr', schema)
             try:
@@ -182,6 +163,3 @@ def bag_to_dataframe(bag_path: Union[str, Path],
                     'Yaw': Y
                 })
     return pd.DataFrame.from_dict(data)
-
-if __name__ == "__main__":
-    bag_to_dataframe(sys.argv[1], sys.argv[2]).to_csv("dataframe.csv")
