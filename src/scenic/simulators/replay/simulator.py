@@ -168,43 +168,102 @@ class ReplaySimulation(DrivingSimulation):
             self.ego.targets_reported.pop()
 
     def step(self):
-        self.clear_targets_reported()
-        self.ego.collision = False
+        targets_groundtruth = {}
+        targets_reported = {}
+        ego = {}
+        # Process simulation data for the next timestep
         for i, msg in self.sim_data_iterrows:
             if msg.Event == "GT_POSITION":
-                obj = self.obj_from_id[msg.EntityID]
-                obj.position = Vector(msg.X, msg.Y, msg.Z)
-                obj.roll = msg.Roll
-                obj.pitch = msg.Pitch
-                obj.yaw = msg.Yaw
-                obj.heading = obj.yaw
+                if msg.EntityID not in targets_groundtruth:
+                    targets_groundtruth[msg.EntityID] = {}
+                    t = targets_groundtruth[msg.EntityID]
+                    t["position"] = np.array([0, 0, 0], dtype=float)
+                    t["roll"] = 0.0
+                    t["pitch"] = 0.0
+                    t["yaw"] = 0.0
+                    t["update_count"] = 0
+                t = targets_groundtruth[msg.EntityID]
+                t["position"] += np.array([msg.X, msg.Y, msg.Z], dtype=float)
+                t["roll"] += msg.Roll
+                t["pitch"] += msg.Pitch
+                t["yaw"] += msg.Yaw
+                t["update_count"] += 1
             elif msg.Event == "ODOM":
-                self.ego.position = Vector(msg.X, msg.Y, msg.Z)
-                self.ego.velocity = Vector(msg.Xdot, msg.Ydot, msg.Zdot)
-                self.ego.speed = scipy.linalg.norm([msg.Xdot, msg.Ydot, msg.Zdot])
-                self.ego.angularVelocity = Vector(msg.Surge, msg.Heave, msg.Sway)
-                self.ego.angularSpeed = msg.Sway
-                self.ego.roll = msg.Roll
-                self.ego.pitch = msg.Pitch
-                self.ego.yaw = msg.Yaw
-                self.ego.heading = self.ego.yaw
+                if ego == {}:
+                    ego["position"] = np.array([0, 0, 0], dtype=float)
+                    ego["velocity"] = np.array([0, 0, 0], dtype=float)
+                    ego["angularVelocity"] = np.array([0, 0, 0], dtype=float)
+                    ego["roll"] = 0.0
+                    ego["pitch"] = 0.0
+                    ego["yaw"] = 0.0
+                    ego["update_count"] = 0
+                ego["position"] += np.array([msg.X, msg.Y, msg.Z], dtype=float)
+                ego["velocity"] += np.array([msg.Xdot, msg.Ydot, msg.Zdot], dtype=float)
+                ego["angularVelocity"] += np.array([msg.Surge, msg.Heave, msg.Sway], dtype=float)
+                ego["roll"] += msg.Roll
+                ego["pitch"] += msg.Pitch
+                ego["yaw"] += msg.Yaw
+                ego["update_count"] += 1
             elif msg.Event == "MSG":
-                overrides={"position": Vector(msg.X, msg.Y, msg.Z),
-                           "roll": msg.Roll,
-                           "pitch": msg.Pitch,
-                           "yaw": msg.Yaw,
-                           "color": msg.Color,
-                           "vehicle_type": msg.Type
-                           }
-                target = self.obj_from_id[msg.EntityID]._copyWith(overrides=overrides)
-                self.ego.targets_reported.append(target)
+                if msg.EntityID not in targets_reported:
+                    targets_reported[msg.EntityID] = {}
+                    t = targets_reported[msg.EntityID]
+                    t["position"] = np.array([0, 0, 0], dtype=float)
+                    t["roll"] = 0.0
+                    t["pitch"] = 0.0
+                    t["yaw"] = 0.0
+                    t["update_count"] = 0
+                t = targets_reported[msg.EntityID]
+                t["position"] += np.array([msg.X, msg.Y, msg.Z], dtype=float)
+                t["roll"] += msg.Roll
+                t["pitch"] += msg.Pitch
+                t["yaw"] += msg.Yaw
+                # TODO: Should the color be averaged? What about vehicle_type?
+                t["color"] = msg.Color
+                t["vehicle_type"] = msg.Type
+                t["update_count"] += 1
             elif msg.Event == "CLSN":
-                self.ego.collision = True
-            # TODO: Need to stop one row earlier
+                ego["collision"] = True
+
+            # TODO: Need to stop one row earlier but there is no way to peek
+            #       at message timestamp without stepping sim_data_iterrows.
             if msg.Timestamp > self.now_time + self.timestep:
                 self.now_time = msg.Timestamp
-                self.ego.T = self.now_time
                 break
+
+        # Update simulation objects
+        self.clear_targets_reported()
+        self.ego.collision = False
+        for id, t in targets_groundtruth.items():
+            obj = self.obj_from_id[id]
+            obj.position = Vector(*(t["position"]/t["update_count"]))
+            obj.roll = t["roll"]/t["update_count"]
+            obj.pitch = t["pitch"]/t["update_count"]
+            obj.yaw = t["yaw"]/t["update_count"]
+            obj.heading = t["pitch"]/t["update_count"]
+        for id, t in targets_reported.items():
+            obj = self.obj_from_id[id]._copyWith()
+            obj.position = Vector(*(t["position"]/t["update_count"]))
+            obj.roll = t["roll"]/t["update_count"]
+            obj.pitch = t["pitch"]/t["update_count"]
+            obj.yaw = t["yaw"]/t["update_count"]
+            obj.heading = t["pitch"]/t["update_count"]
+            obj.color = t["color"]
+            obj.vehicle_type = t["vehicle_type"]
+            self.ego.targets_reported.append(obj)
+        if "position" in ego:
+            self.ego.position = Vector(*(ego["position"]/ego["update_count"]))
+            self.ego.velocity = Vector(*(ego["velocity"]/ego["update_count"]))
+            self.ego.speed = scipy.linalg.norm(self.ego.velocity)
+            self.ego.angularVelocity = Vector(*(ego["angularVelocity"]/ego["update_count"]))
+            self.ego.angularSpeed = self.ego.angularVelocity.z
+            self.ego.roll = ego["roll"]/ego["update_count"]
+            self.ego.pitch = ego["pitch"]/ego["update_count"]
+            self.ego.yaw = ego["yaw"]/ego["update_count"]
+            self.ego.heading = self.ego.yaw
+        if "collision" in ego:
+            self.ego.collision = ego["collision"]
+        self.ego.T = self.now_time
         if self.render:
             self.draw_objects()
             pygame.event.pump()
