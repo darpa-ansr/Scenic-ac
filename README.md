@@ -1,49 +1,57 @@
-This repository contains a modified version of Scenic that adds a capability to replay ROS bags collected from Airsim ADK simulations. The replay capability is intended to be used in conjunction with `scenario_generator.py` for assurance claim verification.
+This repository contains a modified version of Scenic that adds a capability to replay ROS bags
+collected from Airsim ADK simulations. The replay capability is intended to be used in conjunction
+with `tools/ansr/ac_scenario_generator.py` for assurance claim verification.
 
 # Installation
-We recommend installing Scenic-ac in a virtual environment to avoid overwriting any existing Scenic installation. Scenic-ac should be identical to Scenic 3, aside from the replay capability, however this is a beta release and bugs are possible, if not likely. To install scenic in a virtual environment
+We recommend installing Scenic-ac in a virtual environment to avoid overwriting any existing Scenic
+installations. Scenic-ac should be identical to Scenic 3, aside from the replay capability, however
+this is a beta release and bugs are possible, if not likely. To install Scenic-ac in a virtual
+environment
 
 1. Create and activate a Python3 virtual environment of your choice
-2. Clone the Senic-ac repository and enter with `cd Scenic-ac`
-3. Execute `python -m pip install .`
+2. Clone the Scenic-ac repository and enter with `cd Scenic-ac`
+3. Execute `python3 -m pip install .`
 4. Test replay simulator with `pytest tests/simulators/replay/test_replay.py`
 
 # Usage
-To use replay the scenario file must
+To use replay simulator the scenario file must
 
-1. `param sim_data` to Pandas dataframe containing the simulation data
-2. set `model` to `scenic.domains.driving.replay`
-3. Create simulation objects for each entity in the simulation
+1. Set `param sim_data` to Pandas dataframe containing the simulation data (`scenic.simulators.utils.parse_bag.bag_to_dataframe()` should be used for ROS bag to dataframe translation)
+2. Include `model scenic.domains.driving.replay`
+3. Create simulation objects for each entity in the simulation (`tools/ansr/ac_scenario_generator.py` should
+be used for this)
 
 See `tests/simulators/replay/replay.scenic` and `examples/driving/replay/replay.scenic` for examples.
 
 # Assurance Claim Verification
-To verify assurance claim holds for a simulation ROS bag recording, use `ac_scenario_generator.py`
-to first generate the matching Scenic scenario file. Scenario generator takes the ROS bag, mission
-`description.json` and `config.json`, and a collection of assurance claim markdown files (in the
-format described
+To verify assurance claim holds for a simulation ROS bag recording, use
+`tools/ansr/ac_scenario_generator.py` to first generate the matching Scenic scenario file. Scenario
+generator takes the ROS bag, mission `description.json` and `config.json`, and a collection of
+assurance claim markdown files (in the format described
 [here](https://github.com/darpa-ansr/assurance-claims/blob/main/eval02/assurance_claim_formalism.md))
 files to generate a collection of scenario files, one per assurance claim file, that will verify the
-claim. For example,
+claim. For example, the following command line can be used in `tools/ansr/` directory
 
 ```
-python3 ac_scenario_generator.py 1714407582-collect_bag_apltest_as_p_p_r11_5/inputs/generated_missions/1714407408-set/Perception/AreaSearch/AS_P_P_R11_5 1714407559-verifai_test/1714407582-collect_bag_apltest_as_p_p_r11_5/outputs assurance_claims
+python3 ac_scenario_generator.py sim_data sim_data assurance_claims
 ```
 
-IMPORTANT: Although the above example uses relative paths for brevity the path to the ROS bag file
-directory must be absolute.
+IMPORTANT: The provided paths must be absolute unless you plan to run `scenic` in the same directory
+where `ac_scenario_generator.py` was run.
 
 `ac_scenario_generator.py` will create a `.scenic` file for each assurance claim `.md` file in the
 same directory as the assurance claim file. So, if the assurance claim directory contains
-`claim1.md` and `claim2.md` the result will be `claim1.scenic` and `claim2.scenic`. The assurance
-claims are translated into matching require statements in the Scenic scenario files. The domain of
-applicability section of the assurance claim file is currently ignored.
+`test_assurance_claim_1.md` and `test_assurance_claim_2.md`, the result will be files
+`test_assurance_claim_1.scenic` and `test_assurance_claim_2.scenic` in the same directory. The
+assurance claim predicates are translated into matching require statements in the Scenic scenario
+files. The domain of applicability section of the assurance claim file is currently ignored.
 
 The generated Scenic scenario files can now be run in Scenic-ac replay mode to check whether the
-assurance claim holds. In the virtual environment where Scenic-ac is installed execute
+assurance claim holds. In the virtual environment where Scenic-ac is installed, from
+`tools/ansr`, execute
 
 ```
-scenic --replay -v2 <generated .scenic scenario file>
+scenic --replay -v2 test_assurance_claim_1.scenic
 ```
 
 If the assurance claim is satisfied the output will look something like this
@@ -51,8 +59,9 @@ If the assurance claim is satisfied the output will look something like this
 ```
 $ scenic --replay -b -v2 replay_test/test_assurance_claim_1.scenic
 Beginning scenario construction...
-  Compiling Scenic module from /home/genindi1/projects/ANSR/assurance_sandbox/workingeval01/src/replay_test/test_assurance_claim_1.scenic...
-bag_path=/home/genindi1/projects/ANSR/1714407559-verifai_test/1714407582-collect_bag_apltest_as_p_p_r11_5/outputs/bags_0.mcap
+  Compiling Scenic module from ....
+  test_assurance_claim_1.scenic...
+bag_path=....
 pygame 2.5.2 (SDL 2.28.2, Python 3.10.12)
 Hello from the pygame community. https://www.pygame.org/contribute.html
     Compiling Scenic module from /home/genindi1/projects/ANSR/Scenic/src/scenic/simulators/replay/driving_model.scenic...
@@ -78,8 +87,8 @@ If the assurance claim is violated at the initial state of the simulation the ou
 
 ```
 Beginning scenario construction...
-  Compiling Scenic module from /home/genindi1/projects/ANSR/assurance_sandbox/workingeval01/src/replay_test/test_assurance_claim_1.scenic...
-bag_path=/home/genindi1/projects/ANSR/1714407559-verifai_test/1714407582-collect_bag_apltest_as_p_p_r11_5/outputs/bags_0.mcap
+  Compiling Scenic module from ...
+bag_path=...
 pygame 2.5.2 (SDL 2.28.2, Python 3.10.12)
 Hello from the pygame community. https://www.pygame.org/contribute.html
     Compiling Scenic module from /home/genindi1/projects/ANSR/Scenic/src/scenic/simulators/replay/driving_model.scenic...
@@ -102,8 +111,8 @@ If the assurance claim is violated during the simulation the output will look li
 
 ```
 Beginning scenario construction...
-  Compiling Scenic module from /home/genindi1/projects/ANSR/assurance_sandbox/workingeval01/src/replay_test/test_assurance_claim_1.scenic...
-bag_path=/home/genindi1/projects/ANSR/1714407559-verifai_test/1714407582-collect_bag_apltest_as_p_p_r11_5/outputs/bags_0.mcap
+  Compiling Scenic module from ...
+bag_path=...
 pygame 2.5.2 (SDL 2.28.2, Python 3.10.12)
 Hello from the pygame community. https://www.pygame.org/contribute.html
     Compiling Scenic module from /home/genindi1/projects/ANSR/Scenic/src/scenic/simulators/replay/driving_model.scenic...
@@ -126,6 +135,9 @@ Scenario constructed in 10.95 seconds.
 The line "Rejected simulation 1 at time ... " will list the line number of the violated require
 statement. There will only be one require statement corresponding to the assurance claim.
 
+NOTE: Scenario generated for `tools/ansr/assurance_claims/test_assurance_claim_2.md` by
+`ac_scenario_generator.py` causes Scenic to fail with "invalid syntax" error. It appears to be
+an issue with Scenic parser that we are currently working to resolve.
 
 # Standard Scenic documentation below
 
