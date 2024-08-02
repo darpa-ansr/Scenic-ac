@@ -11,16 +11,12 @@ config["environment"]["weather_parameter"]["foliage"] == 0
 ```
 
 # ClaimNatLang
-The position of at least one target specified in the mission specification is reported to within two
-widths of ground truth position at least once during the mission.
+The position of car000 is reported to within two widths of ground truth position at least once
+during the mission.
 
 # Claim
 ```
-eventually any([
-    any([
-        (p.id == q.id) and (distance from p.position to q.position <= 2*p.width)
-        for q in targets_reported
+eventually any([distance from targets_groundtruth["car000"] to q.position <= 2*p.width
+        for q in targets_reported if q.id == "car000"
     ])
-    p in targets_groundtruth
-])
 ```

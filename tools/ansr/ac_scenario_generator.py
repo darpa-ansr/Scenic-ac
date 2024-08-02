@@ -4,8 +4,7 @@ import marko
 import os
 import argparse
 
-koz_def_str = """Zone(BoxRegion(position=Vector({center[0]}, {center[1]}), dimensions={dimensions}))
-"""
+koz_def_str = """Zone(BoxRegion(position=Vector({center[0]}, {center[1]}), dimensions={dimensions}))"""
 
 ego_def_str = """
 ego = new UAVObject at ({location[0]}, {location[1]}),
@@ -15,6 +14,7 @@ ego = new UAVObject at ({location[0]}, {location[1]}),
 """
 
 eoi_def_str = """{id} = new Car at ({location[0]}, {location[1]}),
+    with yaw {yaw:.3f},
     with id '{id}',
     with name '{id}',
     with width 3,
@@ -45,7 +45,9 @@ class UAVObject(Object):
 """
 
 coda = """
-targets_groundtruth = {id_list}
+targets_groundtruth = {{
+    {id_list}
+}}
 targets_reported = ego.targets_reported
 
 # Terminate the simulation when the end of the mission is reached
@@ -129,7 +131,7 @@ def parse_mission_description(description_file) -> str:
     koz_defs = []
     for z in keepout_zones:
         koz_defs.append(koz_def_str.format(center=z[0], dimensions=z[1]))
-    koz_definition = "keep_out_zones = [\n\t" + ",\n\t".join(koz_defs) + "]\n\n"
+    koz_definition = "keep_out_zones = [\n\t" + ",\n\t".join(koz_defs) + "\n]\n\n"
     return koz_definition
 
 def parse_mission_config(config_file: str) -> tuple:
@@ -149,6 +151,7 @@ def parse_mission_config(config_file: str) -> tuple:
                 color=e["attributes"]["color"],
                 vehicle_type=e["attributes"]["class"],
                 location=e["location_ground_truth"][0:2],
+                yaw=e["location_ground_truth"][2]
             )
         )
     entity_defs.append(ego_def_str.format(location=config["controllable_vehicle_start_loc"][0:2]))
@@ -171,6 +174,7 @@ def main(args: argparse.Namespace) -> None:
         elif os.path.basename(f) == "description.json":
             koz_defs = parse_mission_description(os.path.join(args.mission_dir, f))
     topics += [f"/airsim_node/{i}/envcar_pose" for i in entity_attributes]
+    targets_groundtruth_def = ",\n\t".join(map(lambda x:"'{0}': {0}".format(x), entity_attributes.keys()))
     for f in os.listdir(args.assurance_claim_dir):
         if f.endswith(".md"):
             scenario = preamble.format(bag_path=os.path.join(args.bag_dir, "bags_0.mcap"),
@@ -179,7 +183,7 @@ def main(args: argparse.Namespace) -> None:
                                        map_path=args.map_path)
             scenario += koz_defs
             scenario += entity_defs
-            scenario += coda.format(id_list=list(entity_attributes.keys()))
+            scenario += coda.format(id_list=targets_groundtruth_def)
             scenario += f"require (\n{parse_assurance_claim(os.path.join(args.assurance_claim_dir, f))})"
             open(os.path.join(args.assurance_claim_dir, os.path.splitext(f)[0]+".scenic"), "w").write(scenario)
 

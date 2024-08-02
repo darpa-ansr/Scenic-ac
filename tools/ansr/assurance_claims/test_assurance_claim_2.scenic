@@ -17,12 +17,12 @@ class UAVObject(Object):
     T: 0.0
 
 keep_out_zones = [
-	Zone(BoxRegion(position=Vector(75.0, 175.0), dimensions=(50.0, 50.0, 1000.0)))
-,
+	Zone(BoxRegion(position=Vector(75.0, 175.0), dimensions=(50.0, 50.0, 1000.0))),
 	Zone(BoxRegion(position=Vector(175.0, -175.0), dimensions=(150.0, 150.0, 1000.0)))
 ]
 
 car000 = new Car at (-43.0, 59.5),
+    with yaw 1.571,
     with id 'car000',
     with name 'car000',
     with width 3,
@@ -32,6 +32,7 @@ car000 = new Car at (-43.0, 59.5),
     with _needsSampling False
 
 car001 = new Car at (-46.0, 56.5),
+    with yaw 0.000,
     with id 'car001',
     with name 'car001',
     with width 3,
@@ -41,6 +42,7 @@ car001 = new Car at (-46.0, 56.5),
     with _needsSampling False
 
 car002 = new Car at (-154.75, 25.25),
+    with yaw 0.000,
     with id 'car002',
     with name 'car002',
     with width 3,
@@ -50,6 +52,7 @@ car002 = new Car at (-154.75, 25.25),
     with _needsSampling False
 
 car003 = new Car at (-160.25, -41.25),
+    with yaw -1.571,
     with id 'car003',
     with name 'car003',
     with width 3,
@@ -64,7 +67,12 @@ ego = new UAVObject at (-120.0, 93.0),
     with name 'UAV',
     with _needsSampling False
 
-targets_groundtruth = ['car000', 'car001', 'car002', 'car003']
+targets_groundtruth = {
+    'car000': car000,
+	'car001': car001,
+	'car002': car002,
+	'car003': car003
+}
 targets_reported = ego.targets_reported
 
 # Terminate the simulation when the end of the mission is reached

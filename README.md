@@ -135,9 +135,22 @@ Scenario constructed in 10.95 seconds.
 The line "Rejected simulation 1 at time ... " will list the line number of the violated require
 statement. There will only be one require statement corresponding to the assurance claim.
 
+`tools/ansr/assurance_claims` contains four assurance claims that can be used for testing. Test
+assurance claims 1, 2, 3 should succeed and 4 should fail. However, we are working through some
+issues and at the moment this does not match reality (see notes below).
+
 NOTE: Scenario generated for `tools/ansr/assurance_claims/test_assurance_claim_2.md` by
-`ac_scenario_generator.py` causes Scenic to fail with "invalid syntax" error. It appears to be
-an issue with Scenic parser that we are currently working to resolve.
+`ac_scenario_generator.py` causes Scenic to fail with "invalid syntax" error. We are working
+to understand the source of this error.
+
+NOTE: `test_assurance_claim_3.md` and `test_assurance_claim_4.md` do not work when reformulated
+as conjunctions, e.g.,
+```
+eventually any([(q.id == "car000") and (distance from targets_groundtruth["car000"] to q.position <= 2*q.width)
+        for q in targets_reported
+    ])
+```
+We are working to understand why this is this case.
 
 # Standard Scenic documentation below
 

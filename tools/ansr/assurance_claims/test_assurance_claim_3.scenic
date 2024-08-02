@@ -80,7 +80,7 @@ sim_time_end = float(globalParameters["sim_data"].tail(1).Timestamp.values[0]) -
 terminate when (sim_time_end - ego.T) < globalParameters["time_step"]
 
 require (
-# not in any of the keep out zones at intial time (T=0) implies not in any of the keep out zones in the future
-(ego.T==0 and not any([(z.region in ego.position) for z in keep_out_zones]))
-implies always not any([(z.region in ego.position) for z in keep_out_zones])
+eventually any([distance from targets_groundtruth["car000"] to q.position <= 2*p.width
+        for q in targets_reported if q.id == "car000"
+    ])
 )
