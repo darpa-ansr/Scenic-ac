@@ -48,7 +48,8 @@ dependencies = [
 	"scipy ~= 1.7",
 	"shapely ~= 2.0",
 	"trimesh >=4.0.9, <5",
-	"marko ~= 2.1"
+	"marko ~= 2.1",
+	"pandas ~= 1.5",
 ]
 
 [project.optional-dependencies]
