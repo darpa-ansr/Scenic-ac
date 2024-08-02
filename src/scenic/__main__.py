@@ -65,6 +65,9 @@ mainOptions.add_argument(
 mainOptions.add_argument(
     "--2d", action="store_true", help="run Scenic in 2D compatibility mode"
 )
+mainOptions.add_argument(
+    "--replay", action="store_true", help="run Scenic in replay mode"
+)
 
 # Simulation options
 simOpts = parser.add_argument_group("dynamic simulation options")
@@ -153,6 +156,12 @@ parser.add_argument("scenicFile", help="a Scenic file to run", metavar="FILE")
 args = parser.parse_args()
 delay = args.delay
 mode2D = getattr(args, "2d")
+maxIterations = 2000
+if args.replay is True:
+    args.count = 0
+    args.simulate = True
+    args.model = "scenic.simulators.replay.driving_model"
+    maxIterations = 1
 
 if not mode2D:
     if args.delay is not None:
@@ -269,7 +278,7 @@ try:
 
         successCount = 0
         while True:
-            scene, _ = generateScene()
+            scene, _ = generateScene(maxIterations=maxIterations)
             if args.simulate:
                 success = runSimulation(scene)
                 if success:
@@ -286,7 +295,7 @@ try:
                 else:
                     scene.show(axes=args.axes)
 
-            if 0 < args.count <= successCount:
+            if 0 <= args.count <= successCount:
                 break
 
     else:  # Gather statistics over the specified number of scenes/iterations
