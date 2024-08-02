@@ -50,6 +50,8 @@ dependencies = [
 	"trimesh >=4.0.9, <5",
 	"marko ~= 2.1",
 	"pandas ~= 1.5",
+	"mcap ~= 1.1",
+	"mcap-ros2-support ~= 0.5",
 ]
 
 [project.optional-dependencies]
