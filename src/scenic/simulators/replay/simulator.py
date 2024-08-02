@@ -87,6 +87,7 @@ class ReplaySimulation(DrivingSimulation):
         self.sim_data: pd.DataFrame = _globalParameters["sim_data"]
         self.sim_data_iterrows = self.sim_data.iterrows()
         self.now_time: float = float(self.sim_data.head(1).Timestamp.values[0])
+        self.sim_start_time = self.now_time
         self.obj_from_id = {}
         self.ego = None
         super().__init__(scene, timestep=timestep, **kwargs)
@@ -263,7 +264,7 @@ class ReplaySimulation(DrivingSimulation):
             self.ego.heading = self.ego.yaw
         if "collision" in ego:
             self.ego.collision = ego["collision"]
-        self.ego.T = self.now_time
+        self.ego.T = self.now_time - self.sim_start_time
         if self.render:
             self.draw_objects()
             pygame.event.pump()
